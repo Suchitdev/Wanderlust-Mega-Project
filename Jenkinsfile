@@ -1,14 +1,26 @@
 @Library('Shared') _
+
 pipeline {
-    agent { label 'Node' }
+    agent { 
+        label 'Node' 
+    }
 
     environment {
         SONAR_HOME = tool "Sonar"
     }
 
     parameters {
-        string(name: 'FRONTEND_DOCKER_TAG', defaultValue: '', description: 'Setting docker image for latest push')
-        string(name: 'BACKEND_DOCKER_TAG', defaultValue: '', description: 'Setting docker image for latest push')
+        string(
+            name: 'FRONTEND_DOCKER_TAG',
+            defaultValue: '',
+            description: 'Frontend Docker Image Tag'
+        )
+
+        string(
+            name: 'BACKEND_DOCKER_TAG',
+            defaultValue: '',
+            description: 'Backend Docker Image Tag'
+        )
     }
 
     stages {
@@ -16,33 +28,30 @@ pipeline {
         stage("Validate Parameters") {
             steps {
                 script {
-                    if (params.FRONTEND_DOCKER_TAG == '' || params.BACKEND_DOCKER_TAG == '') {
-                        error("FRONTEND_DOCKER_TAG and BACKEND_DOCKER_TAG must be provided.")
+                    if (
+                        params.FRONTEND_DOCKER_TAG.trim() == '' ||
+                        params.BACKEND_DOCKER_TAG.trim() == ''
+                    ) {
+                        error("FRONTEND_DOCKER_TAG and BACKEND_DOCKER_TAG are required.")
                     }
                 }
             }
         }
 
-        stage("Workspace cleanup") {
+        stage("Workspace Cleanup") {
             steps {
-                script {
-                    cleanWs()
-                }
+                cleanWs()
             }
         }
 
-        stage('Git: Code Checkout') {
+        stage("Git: Code Checkout") {
             steps {
-                script {
-                    code_checkout(
-                        "https://github.com/suchitdev/wanderlust-devops.git",
-                        "main"
-                    )
-                }
+                git branch: 'main',
+                url: 'https://github.com/Suchitdev/wanderlust-devops.git'
             }
         }
 
-        stage("Trivy: Filesystem scan") {
+        stage("Trivy: Filesystem Scan") {
             steps {
                 script {
                     trivy_scan()
@@ -50,10 +59,13 @@ pipeline {
             }
         }
 
-        stage("OWASP: Dependency check") {
+        stage("OWASP: Dependency Check") {
             steps {
                 script {
-                    owasp_dependency()
+                    dependencyCheck additionalArguments: '--scan ./',
+                    odcInstallation: 'OWASP'
+
+                    dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
                 }
             }
         }
@@ -61,42 +73,42 @@ pipeline {
         stage("SonarQube: Code Analysis") {
             steps {
                 script {
-                    sonarqube_analysis(
-                        "Sonar",
-                        "wanderlust",
-                        "wanderlust"
-                    )
+                    withSonarQubeEnv('Sonar') {
+
+                        sh '''
+                        ${SONAR_HOME}/bin/sonar-scanner \
+                        -Dsonar.projectName=wanderlust \
+                        -Dsonar.projectKey=wanderlust \
+                        -Dsonar.sources=.
+                        '''
+                    }
                 }
             }
         }
 
-        stage("SonarQube: Code Quality Gates") {
+        stage("SonarQube: Quality Gate") {
             steps {
-                script {
-                    sonarqube_code_quality()
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
 
-        stage('Exporting environment variables') {
+        stage('Environment Setup') {
             parallel {
 
-                stage("Backend env setup") {
+                stage("Backend Env Setup") {
                     steps {
-                        script {
-                            dir("Automations") {
-                                sh "bash updatebackendnew.sh"
-                            }
+                        dir("Automations") {
+                            sh "bash updatebackendnew.sh"
                         }
                     }
                 }
 
-                stage("Frontend env setup") {
+                stage("Frontend Env Setup") {
                     steps {
-                        script {
-                            dir("Automations") {
-                                sh "bash updatefrontendnew.sh"
-                            }
+                        dir("Automations") {
+                            sh "bash updatefrontendnew.sh"
                         }
                     }
                 }
@@ -126,7 +138,7 @@ pipeline {
             }
         }
 
-        stage("Docker: Push to DockerHub") {
+        stage("Docker: Push Images") {
             steps {
                 script {
 
@@ -147,12 +159,17 @@ pipeline {
     }
 
     post {
+
         success {
 
-            archiveArtifacts artifacts: '*.xml', followSymlinks: false
+            archiveArtifacts(
+                artifacts: '*.xml',
+                followSymlinks: false
+            )
 
             build job: "Wanderlust-CD",
             parameters: [
+
                 string(
                     name: 'FRONTEND_DOCKER_TAG',
                     value: "${params.FRONTEND_DOCKER_TAG}"
@@ -164,5 +181,13 @@ pipeline {
                 )
             ]
         }
+
+        failure {
+            echo "CI Pipeline Failed!"
+        }
+
+        always {
+            cleanWs()
+        }
     }
-}git add 
+}
