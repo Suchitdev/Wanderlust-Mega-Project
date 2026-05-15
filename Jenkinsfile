@@ -7,6 +7,7 @@ pipeline {
     environment {
         SONAR_HOME = tool "Sonar"
     }
+
     parameters {
 
         string(
@@ -26,6 +27,7 @@ pipeline {
 
         stage("Validate Parameters") {
             steps {
+
                 script {
 
                     if (
@@ -35,13 +37,17 @@ pipeline {
 
                         error("FRONTEND_DOCKER_TAG and BACKEND_DOCKER_TAG are required.")
                     }
+
                 }
+
             }
         }
 
         stage("Workspace Cleanup") {
             steps {
+
                 cleanWs()
+
             }
         }
 
@@ -51,7 +57,7 @@ pipeline {
                 git(
                     branch: 'main',
                     credentialsId: 'Github',
-                    url: 'https://github.com/Suchitdev/wanderlust-devops.git'
+                    url: 'https://github.com/Suchitdev/Wanderlust-Mega-Project.git'
                 )
 
             }
@@ -61,7 +67,9 @@ pipeline {
             steps {
 
                 script {
+
                     trivy_scan()
+
                 }
 
             }
@@ -111,7 +119,7 @@ pipeline {
             }
         }
 
-        stage('Environment Setup') {
+        stage("Environment Setup") {
 
             parallel {
 
@@ -143,50 +151,54 @@ pipeline {
 
         }
 
-        stage("Docker: Build Images") {
+        stage("Docker: Build Backend Image") {
             steps {
 
-                script {
+                dir("backend") {
 
-                    dir('backend') {
-
-                        docker_build(
-                            imageName: "suchitdev/wanderlust-backend-beta",
-                            imageTag: "${params.BACKEND_DOCKER_TAG}"
-                        )
-
-                    }
-
-                    dir('frontend') {
-
-                        docker_build(
-                            imageName: "suchitdev/wanderlust-frontend-beta",
-                            imageTag: "${params.FRONTEND_DOCKER_TAG}"
-                        )
-
-                    }
+                    docker_build(
+                        imageName: "suchitdev/wanderlust-backend-beta",
+                        imageTag: "${params.BACKEND_DOCKER_TAG}"
+                    )
 
                 }
 
             }
         }
 
-        stage("Docker: Push Images") {
+        stage("Docker: Build Frontend Image") {
             steps {
 
-                script {
+                dir("frontend") {
 
-                    docker_push(
-                        imageName: "suchitdev/wanderlust-backend-beta",
-                        imageTag: "${params.BACKEND_DOCKER_TAG}"
-                    )
-
-                    docker_push(
+                    docker_build(
                         imageName: "suchitdev/wanderlust-frontend-beta",
                         imageTag: "${params.FRONTEND_DOCKER_TAG}"
                     )
 
                 }
+
+            }
+        }
+
+        stage("Docker: Push Backend Image") {
+            steps {
+
+                docker_push(
+                    imageName: "suchitdev/wanderlust-backend-beta",
+                    imageTag: "${params.BACKEND_DOCKER_TAG}"
+                )
+
+            }
+        }
+
+        stage("Docker: Push Frontend Image") {
+            steps {
+
+                docker_push(
+                    imageName: "suchitdev/wanderlust-frontend-beta",
+                    imageTag: "${params.FRONTEND_DOCKER_TAG}"
+                )
 
             }
         }
