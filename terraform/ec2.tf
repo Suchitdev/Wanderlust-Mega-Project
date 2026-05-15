@@ -1,6 +1,6 @@
 resource "aws_key_pair" "deployer" {
   key_name   = "terra-automate-key"
-  public_key = file("/Users/shubham/Documents/work/TrainWithShubham/terra-practice/terra-key.pub")
+  public_key = file(("C:/Users/suchi/.ssh/id_ed25519.pub"))
 }
 
 resource "aws_default_vpc" "default" {
@@ -57,7 +57,7 @@ resource "aws_instance" "testinstance" {
     Name = "Automate"
   }
   root_block_device {
-    volume_size = 30 
+    volume_size = 28
     volume_type = "gp3"
   }
 }
