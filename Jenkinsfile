@@ -12,16 +12,45 @@ pipeline {
     }
 
     parameters {
-        string(name: 'BACKEND_DOCKER_TAG', defaultValue: 'v1', description: 'Backend Docker Tag')
-        string(name: 'FRONTEND_DOCKER_TAG', defaultValue: 'v1', description: 'Frontend Docker Tag')
+
+        string(
+            name: 'FRONTEND_DOCKER_TAG',
+            defaultValue: 'v1',
+            description: 'Frontend Docker Image Tag'
+        )
+
+        string(
+            name: 'BACKEND_DOCKER_TAG',
+            defaultValue: 'v1',
+            description: 'Backend Docker Image Tag'
+        )
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Validate Parameters') {
+            steps {
+                script {
+                    if (
+                        params.FRONTEND_DOCKER_TAG.trim() == "" ||
+                        params.BACKEND_DOCKER_TAG.trim() == ""
+                    ) {
+                        error("Docker tags are required")
+                    }
+                }
+            }
+        }
+
+        stage('Workspace Cleanup') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Git: Code Checkout') {
             steps {
                 git branch: 'main',
-                credentialsId: 'Github',
+                credentialsId: 'Github-token',
                 url: 'https://github.com/Suchitdev/Wanderlust-Mega-Project.git'
             }
         }
@@ -46,16 +75,52 @@ pipeline {
             }
         }
 
+        stage('Trivy: Filesystem Scan') {
+            steps {
+                sh 'trivy fs .'
+            }
+        }
+
+        stage('OWASP: Dependency Check') {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./',
+                odcInstallation: 'OWASP'
+            }
+        }
+
+        stage('OWASP: Publish Report') {
+            steps {
+                dependencyCheckPublisher pattern: 'dependency-check-report.xml'
+            }
+        }
+
+        stage('SonarQube: Code Analysis') {
+            steps {
+                withSonarQubeEnv('sonar') {
+                    sh '''
+                        $SCANNER_HOME/bin/sonar-scanner \
+                        -Dsonar.projectName=Wanderlust \
+                        -Dsonar.projectKey=Wanderlust \
+                        -Dsonar.sources=.
+                    '''
+                }
+            }
+        }
+
+        stage('SonarQube: Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: false
+                }
+            }
+        }
+
         stage('Docker: Build Backend Image') {
             steps {
                 dir('backend') {
-                    script {
-                        docker_build(
-                            'wanderlust-backend',
-                            params.BACKEND_DOCKER_TAG,
-                            'suchit10'
-                        )
-                    }
+                    sh """
+                        docker build -t suchit10/wanderlust-backend:${params.BACKEND_DOCKER_TAG} .
+                    """
                 }
             }
         }
@@ -63,13 +128,9 @@ pipeline {
         stage('Docker: Build Frontend Image') {
             steps {
                 dir('frontend') {
-                    script {
-                        docker_build(
-                            'wanderlust-frontend',
-                            params.FRONTEND_DOCKER_TAG,
-                            'suchit10'
-                        )
-                    }
+                    sh """
+                        docker build -t suchit10/wanderlust-frontend:${params.FRONTEND_DOCKER_TAG} .
+                    """
                 }
             }
         }
@@ -77,11 +138,11 @@ pipeline {
         stage('Docker: Push Backend Image') {
             steps {
                 script {
-                    docker_push(
-                        'wanderlust-backend',
-                        params.BACKEND_DOCKER_TAG,
-                        'suchit10'
-                    )
+                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
+                        sh """
+                            docker push suchit10/wanderlust-backend:${params.BACKEND_DOCKER_TAG}
+                        """
+                    }
                 }
             }
         }
@@ -89,33 +150,34 @@ pipeline {
         stage('Docker: Push Frontend Image') {
             steps {
                 script {
-                    docker_push(
-                        'wanderlust-frontend',
-                        params.FRONTEND_DOCKER_TAG,
-                        'suchit10'
-                    )
+                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub') {
+                        sh """
+                            docker push suchit10/wanderlust-frontend:${params.FRONTEND_DOCKER_TAG}
+                        """
+                    }
                 }
             }
         }
 
         stage('Generate Reports') {
             steps {
-                echo 'CI Pipeline Completed Successfully!'
+                echo 'Pipeline Completed Successfully'
             }
         }
     }
 
     post {
-        always {
-            cleanWs()
-        }
 
         success {
-            echo 'CI Pipeline Passed!'
+            echo 'CI Pipeline Success!'
         }
 
         failure {
             echo 'CI Pipeline Failed!'
+        }
+
+        always {
+            cleanWs()
         }
     }
 }
