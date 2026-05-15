@@ -12,13 +12,13 @@ pipeline {
 
         string(
             name: 'FRONTEND_DOCKER_TAG',
-            defaultValue: '',
+            defaultValue: 'latest',
             description: 'Frontend Docker Image Tag'
         )
 
         string(
             name: 'BACKEND_DOCKER_TAG',
-            defaultValue: '',
+            defaultValue: 'latest',
             description: 'Backend Docker Image Tag'
         )
     }
@@ -97,9 +97,10 @@ pipeline {
 
                     sh """
                         ${SONAR_HOME}/bin/sonar-scanner \
-                        -Dsonar.projectName=wanderlust \
-                        -Dsonar.projectKey=wanderlust \
-                        -Dsonar.sources=.
+                        -Dsonar.projectName=Wanderlust \
+                        -Dsonar.projectKey=Wanderlust \
+                        -Dsonar.sources=. \
+                        -Dsonar.java.binaries=.
                     """
 
                 }
