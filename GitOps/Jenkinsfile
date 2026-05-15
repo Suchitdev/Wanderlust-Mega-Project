@@ -21,7 +21,7 @@ pipeline {
         stage('Git: Code Checkout') {
             steps {
                 script {
-                    code_checkout("https://github.com/suchitdev/Wanderlust-Mega-Project.git", "main")
+                    clone("https://github.com/suchitdev/Wanderlust-Mega-Project.git", "main") 
                 }
             }
         }
