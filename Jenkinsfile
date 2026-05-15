@@ -5,7 +5,7 @@ pipeline {
 
     tools {
         nodejs 'NodeJS'
-        dependencyCheck 'OWASP'
+        
     }
 
     environment {
