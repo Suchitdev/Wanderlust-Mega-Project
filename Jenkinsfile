@@ -1,10 +1,11 @@
+```groovy
 @Library('Shared') _
 
 pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS'
+        nodejs 'Node20'
     }
 
     environment {
@@ -41,6 +42,12 @@ pipeline {
             }
         }
 
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
         stage('Git: Code Checkout') {
             steps {
                 git branch: 'main',
@@ -53,6 +60,7 @@ pipeline {
             steps {
                 dir('backend') {
                     sh '''
+                        npm cache clean --force
                         npm install --legacy-peer-deps
                     '''
                 }
@@ -63,6 +71,7 @@ pipeline {
             steps {
                 dir('frontend') {
                     sh '''
+                        npm cache clean --force
                         npm install --legacy-peer-deps
                     '''
                 }
@@ -175,3 +184,4 @@ pipeline {
         }
     }
 }
+```
