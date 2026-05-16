@@ -4,22 +4,16 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'Node20'
+        nodejs 'node16'
     }
 
     environment {
-        SCANNER_HOME = tool 'Sonar'
+        SONAR_HOME = tool 'Sonar'
     }
 
     stages {
 
-        stage('Clean Workspace') {
-            steps {
-                cleanWs()
-            }
-        }
-
-        stage('Checkout Code') {
+        stage('Git Checkout') {
             steps {
                 git branch: 'main',
                 credentialsId: 'Github-token',
@@ -43,7 +37,7 @@ pipeline {
             }
         }
 
-        stage('Trivy Filesystem Scan') {
+        stage('Trivy Scan') {
             steps {
                 sh 'trivy fs .'
             }
@@ -52,11 +46,11 @@ pipeline {
         stage('OWASP Dependency Check') {
             steps {
                 dependencyCheck additionalArguments: '--scan ./',
-                odcInstallation: 'OWASP'
+                odcInstallation: 'DP-Check'
             }
         }
 
-        stage('OWASP Publish Report') {
+        stage('Publish OWASP Report') {
             steps {
                 dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
@@ -65,13 +59,11 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    sh """
-                    ${SCANNER_HOME}/bin/sonar-scanner \
+                    sh '''
+                    $SONAR_HOME/bin/sonar-scanner \
                     -Dsonar.projectName=Wanderlust \
-                    -Dsonar.projectKey=Wanderlust \
-                    -Dsonar.sources=backend,frontend/src \
-                    -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/.next/**,**/coverage/**
-                    """
+                    -Dsonar.projectKey=Wanderlust
+                    '''
                 }
             }
         }
@@ -86,38 +78,28 @@ pipeline {
 
         stage('Docker Build Backend') {
             steps {
-                script {
-                    docker.build(
-                        "suchit10/wanderlust-backend:latest",
-                        "./backend"
-                    )
+                dir('backend') {
+                    sh 'docker build -t suchit10/wanderlust-backend:latest .'
                 }
             }
         }
 
         stage('Docker Build Frontend') {
             steps {
-                script {
-                    docker.build(
-                        "suchit10/wanderlust-frontend:latest",
-                        "./frontend"
-                    )
+                dir('frontend') {
+                    sh 'docker build -t suchit10/wanderlust-frontend:latest .'
                 }
             }
         }
 
         stage('Docker Login') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'DockerHub Credentials',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )
-                ]) {
-                    sh '''
-                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                    '''
+                withCredentials([usernamePassword(
+                    credentialsId: 'DockerHub Credentials',
+                    passwordVariable: 'DOCKER_PASS',
+                    usernameVariable: 'DOCKER_USER'
+                )]) {
+                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
                 }
             }
         }
@@ -133,17 +115,15 @@ pipeline {
                 sh 'docker push suchit10/wanderlust-frontend:latest'
             }
         }
-
     }
 
     post {
-
         always {
             echo 'Pipeline Completed'
         }
 
         success {
-            echo 'CI Pipeline Passed!'
+            echo 'CI Pipeline Success!'
         }
 
         failure {
