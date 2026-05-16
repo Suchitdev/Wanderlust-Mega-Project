@@ -8,33 +8,21 @@ pipeline {
     }
 
     environment {
-        SONAR_HOME = tool 'Sonar'
-    }
-
-    parameters {
-        string(name: 'FRONTEND_DOCKER_TAG', defaultValue: 'latest', description: 'Frontend Docker tag')
-        string(name: 'BACKEND_DOCKER_TAG', defaultValue: 'latest', description: 'Backend Docker tag')
+        SCANNER_HOME = tool 'Sonar'
     }
 
     stages {
 
-        stage('Validate Parameters') {
+        stage('Clean Workspace') {
             steps {
-                script {
-                    if (params.FRONTEND_DOCKER_TAG.trim() == '') {
-                        error("FRONTEND_DOCKER_TAG cannot be empty")
-                    }
-
-                    if (params.BACKEND_DOCKER_TAG.trim() == '') {
-                        error("BACKEND_DOCKER_TAG cannot be empty")
-                    }
-                }
+                cleanWs()
             }
         }
 
-        stage('Git: Code Checkout') {
+        stage('Checkout Code') {
             steps {
                 git branch: 'main',
+                credentialsId: 'Github-token',
                 url: 'https://github.com/Suchitdev/Wanderlust.git'
             }
         }
@@ -55,112 +43,111 @@ pipeline {
             }
         }
 
-        stage('Trivy: Filesystem Scan') {
+        stage('Trivy Filesystem Scan') {
             steps {
-                script {
-                    trivy_scan('fs .')
-                }
+                sh 'trivy fs .'
             }
         }
 
-        stage('OWASP: Dependency Check') {
+        stage('OWASP Dependency Check') {
             steps {
-                dependencyCheck additionalArguments: '''
-                    --scan .
-                    --disableYarnAudit
-                    --disableNodeAudit
-                ''',
-                odcInstallation: 'DP-Check'
+                dependencyCheck additionalArguments: '--scan ./',
+                odcInstallation: 'OWASP'
             }
         }
 
-        stage('OWASP: Publish Report') {
+        stage('OWASP Publish Report') {
             steps {
-                dependencyCheckPublisher pattern: 'dependency-check-report.xml'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
         }
 
-        stage('SonarQube: Code Analysis') {
+        stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
                     sh """
-                    ${SONAR_HOME}/bin/sonar-scanner \
+                    ${SCANNER_HOME}/bin/sonar-scanner \
                     -Dsonar.projectName=Wanderlust \
                     -Dsonar.projectKey=Wanderlust \
                     -Dsonar.sources=backend,frontend/src \
-                    -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/.next/**,**/coverage/** \
-                    -Dsonar.javascript.node.maxspace=4096
+                    -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/.next/**,**/coverage/**
                     """
                 }
             }
         }
 
-        stage('SonarQube: Quality Gate') {
+        stage('Quality Gate') {
             steps {
-                echo 'Skipping Quality Gate for low-memory EC2 instance'
-            }
-        }
-
-        stage('Docker: Build Backend Image') {
-            steps {
-                dir('backend') {
-                    script {
-                        docker_build(
-                            "suchitdev/wanderlust-backend:${params.BACKEND_DOCKER_TAG}",
-                            "."
-                        )
-                    }
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: false
                 }
             }
         }
 
-        stage('Docker: Build Frontend Image') {
-            steps {
-                dir('frontend') {
-                    script {
-                        docker_build(
-                            "suchitdev/wanderlust-frontend:${params.FRONTEND_DOCKER_TAG}",
-                            "."
-                        )
-                    }
-                }
-            }
-        }
-
-        stage('Docker: Push Backend Image') {
+        stage('Docker Build Backend') {
             steps {
                 script {
-                    docker_push("suchitdev/wanderlust-backend:${params.BACKEND_DOCKER_TAG}")
+                    docker.build(
+                        "suchit10/wanderlust-backend:latest",
+                        "./backend"
+                    )
                 }
             }
         }
 
-        stage('Docker: Push Frontend Image') {
+        stage('Docker Build Frontend') {
             steps {
                 script {
-                    docker_push("suchitdev/wanderlust-frontend:${params.FRONTEND_DOCKER_TAG}")
+                    docker.build(
+                        "suchit10/wanderlust-frontend:latest",
+                        "./frontend"
+                    )
                 }
             }
         }
 
-        stage('Generate Reports') {
+        stage('Docker Login') {
             steps {
-                echo 'Pipeline completed successfully!'
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'DockerHub Credentials',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )
+                ]) {
+                    sh '''
+                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    '''
+                }
             }
         }
+
+        stage('Docker Push Backend') {
+            steps {
+                sh 'docker push suchit10/wanderlust-backend:latest'
+            }
+        }
+
+        stage('Docker Push Frontend') {
+            steps {
+                sh 'docker push suchit10/wanderlust-frontend:latest'
+            }
+        }
+
     }
 
     post {
+
+        always {
+            echo 'Pipeline Completed'
+        }
+
         success {
             echo 'CI Pipeline Passed!'
         }
 
         failure {
             echo 'CI Pipeline Failed!'
-        }
-
-        always {
-            cleanWs()
         }
     }
 }
