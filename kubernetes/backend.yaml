@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: suchitdev/wanderlust-backend-beta:v2.1
+          image: suchitdev/wanderlust-backend-beta:latest
 
           ports:
             - containerPort: 8080
