@@ -8,7 +8,7 @@ pipeline {
     }
 
     environment {
-        SCANNER_HOME = tool 'Sonar'
+        SONAR_HOME = tool 'Sonar'
     }
 
     parameters {
@@ -21,7 +21,8 @@ pipeline {
         stage('Git Checkout') {
             steps {
                 git branch: 'main',
-                url: 'https://github.com/Suchitdev/Wanderlust.git'
+                    credentialsId: 'Github-token',
+                    url: 'https://github.com/Suchitdev/Wanderlust-Mega-Project.git'
             }
         }
 
@@ -49,7 +50,8 @@ pipeline {
 
         stage('OWASP Dependency Check') {
             steps {
-                dependencyCheck additionalArguments: '--scan ./', odcInstallation: 'OWASP'
+                dependencyCheck additionalArguments: '--scan .',
+                odcInstallation: 'OWASP'
             }
         }
 
@@ -61,9 +63,9 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
+                withSonarQubeEnv('Sonar') {
                     sh '''
-                    $SCANNER_HOME/bin/sonar-scanner \
+                    $SONAR_HOME/bin/sonar-scanner \
                     -Dsonar.projectName=Wanderlust \
                     -Dsonar.projectKey=Wanderlust \
                     -Dsonar.sources=.
@@ -101,6 +103,7 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
+
                     sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
                 }
             }
@@ -126,7 +129,7 @@ pipeline {
         }
 
         success {
-            echo 'CI Pipeline Passed!'
+            echo 'CI Pipeline Success!'
         }
 
         failure {
