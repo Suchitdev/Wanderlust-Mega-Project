@@ -21,7 +21,6 @@ pipeline {
         stage('Git Checkout') {
             steps {
                 git branch: 'main',
-                credentialsId: 'Github-token',
                 url: 'https://github.com/Suchitdev/Wanderlust.git'
             }
         }
@@ -50,8 +49,7 @@ pipeline {
 
         stage('OWASP Dependency Check') {
             steps {
-                dependencyCheck additionalArguments: '--scan ./',
-                odcInstallation: 'OWASP'
+                dependencyCheck additionalArguments: '--scan ./', odcInstallation: 'OWASP'
             }
         }
 
@@ -63,11 +61,12 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('Sonar') {
+                withSonarQubeEnv('SonarQube') {
                     sh '''
                     $SCANNER_HOME/bin/sonar-scanner \
                     -Dsonar.projectName=Wanderlust \
-                    -Dsonar.projectKey=Wanderlust
+                    -Dsonar.projectKey=Wanderlust \
+                    -Dsonar.sources=.
                     '''
                 }
             }
@@ -98,7 +97,7 @@ pipeline {
         stage('Docker Login') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'Dockerhub',
+                    credentialsId: 'DockerHub Credentials',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
