@@ -4,11 +4,16 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'node16'
+        nodejs 'Node20'
     }
 
     environment {
-        SONAR_HOME = tool 'Sonar'
+        SCANNER_HOME = tool 'Sonar'
+    }
+
+    parameters {
+        string(name: 'FRONTEND_DOCKER_TAG', defaultValue: 'latest', description: 'Frontend Docker Tag')
+        string(name: 'BACKEND_DOCKER_TAG', defaultValue: 'latest', description: 'Backend Docker Tag')
     }
 
     stages {
@@ -46,7 +51,7 @@ pipeline {
         stage('OWASP Dependency Check') {
             steps {
                 dependencyCheck additionalArguments: '--scan ./',
-                odcInstallation: 'DP-Check'
+                odcInstallation: 'OWASP'
             }
         }
 
@@ -58,9 +63,9 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonar') {
+                withSonarQubeEnv('Sonar') {
                     sh '''
-                    $SONAR_HOME/bin/sonar-scanner \
+                    $SCANNER_HOME/bin/sonar-scanner \
                     -Dsonar.projectName=Wanderlust \
                     -Dsonar.projectKey=Wanderlust
                     '''
@@ -70,16 +75,14 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 10, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: false
-                }
+                waitForQualityGate abortPipeline: false
             }
         }
 
         stage('Docker Build Backend') {
             steps {
                 dir('backend') {
-                    sh 'docker build -t suchit10/wanderlust-backend:latest .'
+                    sh "docker build -t suchit10/wanderlust-backend:${BACKEND_DOCKER_TAG} ."
                 }
             }
         }
@@ -87,7 +90,7 @@ pipeline {
         stage('Docker Build Frontend') {
             steps {
                 dir('frontend') {
-                    sh 'docker build -t suchit10/wanderlust-frontend:latest .'
+                    sh "docker build -t suchit10/wanderlust-frontend:${FRONTEND_DOCKER_TAG} ."
                 }
             }
         }
@@ -95,9 +98,9 @@ pipeline {
         stage('Docker Login') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'DockerHub Credentials',
-                    passwordVariable: 'DOCKER_PASS',
-                    usernameVariable: 'DOCKER_USER'
+                    credentialsId: 'Dockerhub',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
                 }
@@ -106,13 +109,13 @@ pipeline {
 
         stage('Docker Push Backend') {
             steps {
-                sh 'docker push suchit10/wanderlust-backend:latest'
+                sh "docker push suchit10/wanderlust-backend:${BACKEND_DOCKER_TAG}"
             }
         }
 
         stage('Docker Push Frontend') {
             steps {
-                sh 'docker push suchit10/wanderlust-frontend:latest'
+                sh "docker push suchit10/wanderlust-frontend:${FRONTEND_DOCKER_TAG}"
             }
         }
     }
@@ -120,10 +123,11 @@ pipeline {
     post {
         always {
             echo 'Pipeline Completed'
+            cleanWs()
         }
 
         success {
-            echo 'CI Pipeline Success!'
+            echo 'CI Pipeline Passed!'
         }
 
         failure {
