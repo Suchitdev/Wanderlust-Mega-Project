@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: suchitdev/wanderlust-frontend-beta:latest
+          image: suchit10/wanderlust-frontend-beta:latest
 
           ports:
             - containerPort: 5173
