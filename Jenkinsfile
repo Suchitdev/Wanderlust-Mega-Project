@@ -41,12 +41,6 @@ pipeline {
             }
         }
 
-        stage('Workspace Cleanup') {
-            steps {
-                cleanWs()
-            }
-        }
-
         stage('Git: Code Checkout') {
             steps {
                 git branch: 'main',
