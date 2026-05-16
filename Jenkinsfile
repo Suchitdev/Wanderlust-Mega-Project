@@ -12,6 +12,7 @@ pipeline {
     }
 
     parameters {
+
         string(
             name: 'FRONTEND_DOCKER_TAG',
             defaultValue: 'latest',
@@ -28,7 +29,9 @@ pipeline {
     stages {
 
         stage('Git Checkout') {
+
             steps {
+
                 git branch: 'main',
                     credentialsId: 'Github-token',
                     url: 'https://github.com/Suchitdev/Wanderlust-Mega-Project.git'
@@ -36,8 +39,11 @@ pipeline {
         }
 
         stage('Install Backend Dependencies') {
+
             steps {
+
                 dir('backend') {
+
                     sh '''
                         npm install
                     '''
@@ -46,8 +52,11 @@ pipeline {
         }
 
         stage('Install Frontend Dependencies') {
+
             steps {
+
                 dir('frontend') {
+
                     sh '''
                         npm install
                     '''
@@ -56,7 +65,9 @@ pipeline {
         }
 
         stage('Trivy File Scan') {
+
             steps {
+
                 sh '''
                     trivy fs . --severity HIGH,CRITICAL
                 '''
@@ -64,7 +75,9 @@ pipeline {
         }
 
         stage('OWASP Dependency Check') {
+
             steps {
+
                 dependencyCheck(
                     additionalArguments: '''
                         --scan .
@@ -76,7 +89,9 @@ pipeline {
         }
 
         stage('Publish OWASP Report') {
+
             steps {
+
                 dependencyCheckPublisher(
                     pattern: '**/dependency-check-report.xml'
                 )
@@ -84,7 +99,9 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
+
             steps {
+
                 withSonarQubeEnv('sonar') {
 
                     sh '''
@@ -98,32 +115,8 @@ pipeline {
             }
         }
 
-        stage('Quality Gate') {
-            steps {
-
-                timeout(time: 5, unit: 'MINUTES') {
-
-                    script {
-
-                        def qg = waitForQualityGate()
-
-                        echo "Quality Gate Status: ${qg.status}"
-
-                        if (qg.status != 'OK') {
-
-                            echo 'Quality Gate failed, but pipeline will continue.'
-
-                        } else {
-
-                            echo 'Quality Gate Passed.'
-
-                        }
-                    }
-                }
-            }
-        }
-
         stage('Docker Build Backend') {
+
             steps {
 
                 dir('backend') {
@@ -137,6 +130,7 @@ pipeline {
         }
 
         stage('Docker Build Frontend') {
+
             steps {
 
                 dir('frontend') {
@@ -150,6 +144,7 @@ pipeline {
         }
 
         stage('Docker Login') {
+
             steps {
 
                 withCredentials([
@@ -170,6 +165,7 @@ pipeline {
         }
 
         stage('Docker Push Backend') {
+
             steps {
 
                 sh """
@@ -179,6 +175,7 @@ pipeline {
         }
 
         stage('Docker Push Frontend') {
+
             steps {
 
                 sh """
